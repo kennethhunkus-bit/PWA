@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0a0d0e"/>
+  <rect x="4" y="4" width="504" height="504" fill="none" stroke="#ffb000" stroke-width="6"/>
+  <!-- MQ-9 silhouette simplified -->
+  <!-- Fuselage -->
+  <rect x="180" y="248" width="200" height="18" rx="4" fill="#ffb000"/>
+  <!-- Nose -->
+  <ellipse cx="380" cy="257" rx="28" ry="10" fill="#ffb000"/>
+  <!-- Tail boom -->
+  <rect x="140" y="251" width="50" height="12" rx="3" fill="#ffb000"/>
+  <!-- V-tail fins -->
+  <polygon points="140,263 110,300 155,263" fill="#ffb000" opacity="0.85"/>
+  <polygon points="140,251 110,214 155,251" fill="#ffb000" opacity="0.85"/>
+  <!-- Main wing -->
+  <polygon points="240,248 280,248 340,170 310,170" fill="#ffb000"/>
+  <polygon points="240,266 280,266 340,344 310,344" fill="#ffb000"/>
+  <!-- Engine pod -->
+  <ellipse cx="230" cy="257" rx="22" ry="7" fill="#161d25" stroke="#ffb000" stroke-width="2"/>
+  <!-- Label -->
+  <text x="256" y="400" text-anchor="middle" font-family="monospace" font-size="36" font-weight="bold" fill="#ffb000" letter-spacing="4">FUEL</text>
+  <text x="256" y="435" text-anchor="middle" font-family="monospace" font-size="18" fill="#6b7a85" letter-spacing="6">PLANNER</text>
+</svg>

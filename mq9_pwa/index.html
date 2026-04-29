@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FuelPlan">
+<meta name="theme-color" content="#ffb000">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>MQ-9 Fuel Planner</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg-0: #0a0d0e;
+  --bg-1: #10151a;
+  --bg-2: #161d25;
+  --line: #2a3642;
+  --line-hot: #3d5468;
+  --text: #cfd8dc;
+  --text-dim: #6b7a85;
+  --amber: #ffb000;
+  --cyan: #00e5ff;
+  --green: #39ff7a;
+  --red: #ff3b3b;
+  --safe: env(safe-area-inset-bottom, 0px);
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── STATUS BAR ── */
+#statusbar {
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-hot);
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+}
+.sb-left { display: flex; flex-direction: column; gap: 2px; }
+.sb-title { font-size: 11px; letter-spacing: 0.2em; color: var(--amber); font-weight: 700; }
+.sb-sub   { font-size: 9px; letter-spacing: 0.2em; color: var(--text-dim); }
+.sb-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+#status-badge { font-size: 12px; font-weight: 700; letter-spacing: 0.15em; }
+#clock        { font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; font-variant-numeric: tabular-nums; }
+
+/* ── NAV TABS ── */
+#nav {
+  display: flex;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.nav-btn {
+  flex: 1;
+  padding: 10px 4px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s, border-color 0.15s;
+}
+.nav-btn.active { color: var(--amber); border-bottom-color: var(--amber); }
+
+/* ── SCROLL AREA ── */
+#content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 12px calc(12px + var(--safe));
+}
+
+/* ── SCREEN ── */
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.card-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.card-hd .chevron { transition: transform 0.2s; font-size: 10px; }
+.card-hd.collapsed .chevron { transform: rotate(-90deg); }
+.card-body { padding: 12px; }
+.card-body.hidden { display: none; }
+
+/* ── BIG READOUT ── */
+.readout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.readout-cell { text-align: center; }
+.readout-label { font-size: 9px; letter-spacing: 0.2em; color: var(--text-dim); margin-bottom: 2px; text-transform: uppercase; }
+.readout-val   { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.readout-sub   { font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+
+/* push time — full width */
+.push-block { text-align: center; padding: 8px 0; }
+.push-val   { font-size: 52px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.push-sub   { font-size: 10px; color: var(--text-dim); margin-top: 4px; letter-spacing: 0.1em; }
+
+/* ── METRIC LIST ── */
+.metric-list { display: flex; flex-direction: column; gap: 0; }
+.metric-row  {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 12px;
+}
+.metric-row:last-child { border-bottom: none; }
+.metric-lbl { color: var(--text-dim); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
+.metric-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ── SLIDERS ── */
+.slider-row { margin-bottom: 14px; }
+.slider-hdr { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.slider-lbl { font-size: 10px; color: var(--text-dim); letter-spacing: 0.15em; text-transform: uppercase; }
+.slider-val { font-size: 13px; font-weight: 700; color: var(--amber); font-variant-numeric: tabular-nums; }
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%; height: 6px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px; height: 22px;
+  background: var(--amber);
+  border-radius: 0;
+  cursor: pointer;
+  margin-top: -8px;
+}
+
+/* ── FORM FIELDS ── */
+.field { margin-bottom: 12px; }
+.field label {
+  display: block;
+  font-size: 10px; letter-spacing: 0.15em;
+  color: var(--text-dim); margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.field input[type="number"],
+.field input[type="text"] {
+  width: 100%;
+  background: var(--bg-0); border: 1px solid var(--line);
+  color: var(--amber); font-family: inherit; font-size: 16px;
+  padding: 10px 12px; outline: none; border-radius: 0;
+  -webkit-appearance: none;
+}
+.field input:focus { border-color: var(--cyan); }
+
+/* ── TIMELINE ── */
+.tl-phase {
+  padding: 10px 12px;
+  border-left: 3px solid var(--text-dim);
+  margin-bottom: 8px;
+  background: var(--bg-0);
+}
+.tl-phase-label { font-size: 9px; letter-spacing: 0.2em; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }
+.tl-phase-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px; }
+.tl-lbl         { color: var(--text-dim); }
+
+.tl-total {
+  padding: 10px 12px;
+  background: rgba(255,176,0,0.06);
+  border: 1px solid var(--amber);
+  margin-top: 4px;
+}
+.tl-total-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; }
+
+/* ── PERF TABLES ── */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+td, th { padding: 5px 6px; text-align: right; border: 1px solid var(--line); }
+th { background: var(--bg-2); color: var(--text-dim); font-size: 9px; letter-spacing: 0.1em; }
+td input[type="number"] {
+  width: 62px; padding: 4px 4px;
+  font-size: 12px; text-align: right;
+  background: var(--bg-0); border: 1px solid var(--line);
+  color: var(--amber); font-family: inherit;
+  -webkit-appearance: none; border-radius: 0;
+}
+td input:focus { border-color: var(--cyan); outline: none; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-block;
+  padding: 10px 16px;
+  font-size: 10px; letter-spacing: 0.2em;
+  font-family: inherit; text-transform: uppercase;
+  cursor: pointer; border-radius: 0;
+  -webkit-appearance: none;
+}
+.btn-red    { background: transparent; border: 1px solid var(--red);   color: var(--red);   }
+.btn-cyan   { background: transparent; border: 1px solid var(--cyan);  color: var(--cyan);  }
+.btn-amber  { background: transparent; border: 1px solid var(--amber); color: var(--amber); }
+.btn-green  { background: transparent; border: 1px solid var(--green); color: var(--green); }
+.btn-row    { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* ── SAVE/LOAD BAR ── */
+#io-bar {
+  display: flex; gap: 8px; align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+#io-bar .io-label { font-size: 9px; color: var(--text-dim); letter-spacing: 0.15em; text-transform: uppercase; flex-shrink: 0; }
+#io-bar .btn { padding: 6px 12px; font-size: 9px; }
+#save-toast {
+  font-size: 9px; letter-spacing: 0.15em; color: var(--green);
+  opacity: 0; transition: opacity 0.3s;
+}
+
+/* ── DIVIDER ── */
+.section-hd {
+  font-size: 9px; letter-spacing: 0.25em; color: var(--amber);
+  margin: 14px 0 8px; text-transform: uppercase;
+}
+
+/* ── INSTALL BANNER ── */
+#install-banner {
+  display: none;
+  background: rgba(0,229,255,0.08);
+  border: 1px solid var(--cyan);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--cyan);
+  line-height: 1.5;
+}
+
+@keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0.3} }
+.blink { animation: blink 1s infinite; }
+</style>
+</head>
+<body>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <div class="sb-left">
+    <div class="sb-title">MQ-9 · FUEL PLANNER</div>
+    <div class="sb-sub">MARPAT · MARITIME SURVEILLANCE</div>
+  </div>
+  <div class="sb-right">
+    <div id="status-badge" style="color:var(--green)">● NOMINAL</div>
+    <div id="clock">000000Z<span class="blink">_</span></div>
+  </div>
+</div>
+
+<!-- SAVE/LOAD BAR -->
+<div id="io-bar">
+  <span class="io-label">CONFIG</span>
+  <button class="btn btn-green" id="btn-export">↓ Export</button>
+  <button class="btn btn-cyan"  id="btn-import">↑ Import</button>
+  <input type="file" id="file-import" accept=".json" style="display:none">
+  <span id="save-toast">✓ SAVED</span>
+</div>
+
+<!-- NAV -->
+<div id="nav">
+  <button class="nav-btn active" data-screen="dash">DASH</button>
+  <button class="nav-btn" data-screen="inputs">INPUTS</button>
+  <button class="nav-btn" data-screen="timeline">TIMELINE</button>
+  <button class="nav-btn" data-screen="tables">TABLES</button>
+  <button class="nav-btn" data-screen="settings">CONFIG</button>
+</div>
+
+<!-- CONTENT -->
+<div id="content">
+
+  <!-- ══ DASH ══ -->
+  <div id="screen-dash" class="screen active">
+
+    <div id="install-banner">
+      📲 Add to Home Screen: tap the Share button in Safari, then "Add to Home Screen" for offline access.
+    </div>
+
+    <!-- Bingo / Status -->
+    <div class="card">
+      <div class="card-hd" data-target="bingo-body">
+        <span>▮ Fuel Status</span><span class="chevron">▾</span>
+      </div>
+      <div class="card-body" id="bingo-body">
+        <div class="push-block">
+          <div class="readout-label">MAX TIME ON STATION</div>
+          <div class="push-val" id="push-time" style="color:var(--green)">--:--</div>
+          <div class="push-sub" id="push-sub">AT --- FT · --- LB/HR</div>
+        </div>
+        <div class="metric-list" style="margin-top:10px">
+          <div class="metric-row"><span class="metric-lbl">Bingo Fuel</span><span class="metric-val" id="m-bingo">--- LB</span></div>
+          <div class="metric-row"><span class="metric-lbl">Above Bingo</span><span class="metric-val" id="m-over-bingo">--- LB</span></div>
+          <div class="metric-row"><span class="metric-lbl">RTB Fuel Req</span><span class="metric-val" style="color:var(--amber)" id="m-rtb-fuel">--- LB</span></div>
+          <div class="metric-row"><span class="metric-lbl">Reserve (Land)</span><span class="metric-val" id="m-reserve">--- LB</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Profile -->
+    <div class="card">
+      <div class="card-hd" data-target="profile-body">
+        <span>▮ Current Profile</span><span id="cur-alt-hd" style="color:var(--text-dim);font-size:9px">--- FT</span><span class="chevron">▾</span>
+      </div>
+      <div class="card-body" id="profile-body">
+        <div class="readout-grid">
+          <div class="readout-cell">
+            <div class="readout-label">ENDURANCE</div>
+            <div class="readout-val" style="color:var(--amber)" id="end-reserve">--:--</div>
+            <div class="readout-sub">TO RESERVE</div>
+          </div>
+          <div class="readout-cell">
+            <div class="readout-label">RANGE</div>
+            <div class="readout-val" style="color:var(--cyan)" id="range-nm">---</div>
+            <div class="readout-sub" id="range-sub">NM · --- KTS GS</div>
+          </div>
+        </div>
+        <div class="metric-list">
+          <div class="metric-row"><span class="metric-lbl">Fuel Burn</span><span class="metric-val" id="m-burn-now">--- LB/HR</span></div>
+          <div class="metric-row"><span class="metric-lbl">TAS</span><span class="metric-val" id="m-tas-now">--- KTAS</span></div>
+          <div class="metric-row"><span class="metric-lbl">Ground Speed</span><span class="metric-val" id="m-gs-now">--- KTS</span></div>
+          <div class="metric-row"><span class="metric-lbl">FOB</span><span class="metric-val" id="m-fob">--- LB</span></div>
+          <div class="metric-row"><span class="metric-lbl">Usable (above rsv)</span><span class="metric-val" style="color:var(--green)" id="m-usable">--- LB</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick sliders -->
+    <div class="card">
+      <div class="card-hd" data-target="sliders-body">
+        <span>▮ Quick Adjust</span><span class="chevron">▾</span>
+      </div>
+      <div class="card-body" id="sliders-body">
+        <div id="sliders"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ INPUTS ══ -->
+  <div id="screen-inputs" class="screen">
+    <div class="section-hd">Mission Parameters</div>
+    <div id="mission-form"></div>
+  </div>
+
+  <!-- ══ TIMELINE ══ -->
+  <div id="screen-timeline" class="screen">
+    <div class="section-hd">Mission Timeline</div>
+
+    <div class="tl-phase" id="tl-out-block" style="border-left-color:var(--cyan)">
+      <div class="tl-phase-label" style="color:var(--cyan)">① Outbound Transit</div>
+      <div class="tl-phase-grid">
+        <div><span class="tl-lbl">ALT </span><span id="tl-out-alt">---</span></div>
+        <div><span class="tl-lbl">DIST </span><span id="tl-out-dist">---</span></div>
+        <div><span class="tl-lbl">GS </span><span id="tl-out-gs">---</span></div>
+        <div><span class="tl-lbl">BURN </span><span id="tl-out-burn">---</span></div>
+        <div><span class="tl-lbl">TIME </span><span id="tl-out-time" style="color:var(--amber);font-weight:700">--:--</span></div>
+        <div><span class="tl-lbl">FUEL </span><span id="tl-out-fuel" style="color:var(--amber);font-weight:700">---</span></div>
+      </div>
+    </div>
+
+    <div class="tl-phase" id="tl-sta-block" style="border-left-color:var(--green);background:rgba(57,255,122,0.04)">
+      <div class="tl-phase-label" style="color:var(--green)">② On Station</div>
+      <div class="tl-phase-grid">
+        <div><span class="tl-lbl">ALT </span><span id="tl-sta-alt">---</span></div>
+        <div><span class="tl-lbl">DIST </span><span>—</span></div>
+        <div><span class="tl-lbl">GS </span><span>—</span></div>
+        <div><span class="tl-lbl">BURN </span><span id="tl-sta-burn">---</span></div>
+        <div><span class="tl-lbl">TIME </span><span id="tl-sta-time" style="color:var(--amber);font-weight:700">--:--</span></div>
+        <div><span class="tl-lbl">FUEL </span><span id="tl-sta-fuel" style="color:var(--amber);font-weight:700">---</span></div>
+      </div>
+    </div>
+
+    <div class="tl-phase" id="tl-rtb-block" style="border-left-color:var(--amber)">
+      <div class="tl-phase-label" style="color:var(--amber)">③ RTB</div>
+      <div class="tl-phase-grid">
+        <div><span class="tl-lbl">ALT </span><span id="tl-rtb-alt">---</span></div>
+        <div><span class="tl-lbl">DIST </span><span id="tl-rtb-dist">---</span></div>
+        <div><span class="tl-lbl">GS </span><span id="tl-rtb-gs">---</span></div>
+        <div><span class="tl-lbl">BURN </span><span id="tl-rtb-burn">---</span></div>
+        <div><span class="tl-lbl">TIME </span><span id="tl-rtb-time" style="color:var(--amber);font-weight:700">--:--</span></div>
+        <div><span class="tl-lbl">FUEL </span><span id="tl-rtb-fuel" style="color:var(--amber);font-weight:700">---</span></div>
+      </div>
+    </div>
+
+    <div class="tl-total">
+      <div class="tl-total-row"><span style="color:var(--text-dim)">TOTAL TIME</span><span style="color:var(--amber);font-weight:700" id="total-time">--:--</span></div>
+      <div class="tl-total-row"><span style="color:var(--text-dim)">TOTAL BURN</span><span style="color:var(--amber);font-weight:700" id="total-fuel">--- LB</span></div>
+      <div class="tl-total-row"><span style="color:var(--text-dim)">LAND WITH</span><span style="color:var(--green);font-weight:700" id="total-reserve">--- LB</span></div>
+    </div>
+  </div>
+
+  <!-- ══ TABLES ══ -->
+  <div id="screen-tables" class="screen">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div class="section-hd" style="margin:0">Perf Tables</div>
+      <button class="btn btn-red" id="reset-tables-btn" style="padding:6px 10px;font-size:9px">RESET</button>
+    </div>
+    <div style="font-size:9px;color:var(--text-dim);margin-bottom:10px;letter-spacing:0.1em">
+      FUEL BURN (LB/HR) — scroll →
+    </div>
+    <div class="table-scroll" id="burn-table-wrap"></div>
+    <div style="font-size:9px;color:var(--text-dim);margin:12px 0 8px;letter-spacing:0.1em">
+      TRUE AIRSPEED (KTAS) — scroll →
+    </div>
+    <div class="table-scroll" id="tas-table-wrap"></div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:12px;line-height:1.6;padding:10px;background:var(--bg-1);border:1px dashed var(--line)">
+      Values bilinearly interpolated between grid points. Clamped at envelope edges. Use Export to back up edited tables.
+    </div>
+  </div>
+
+  <!-- ══ SETTINGS ══ -->
+  <div id="screen-settings" class="screen">
+    <div class="section-hd">Aircraft Config (Persisted)</div>
+    <div id="config-form"></div>
+    <div class="section-hd">Callsign</div>
+    <div class="field">
+      <label>Callsign</label>
+      <input type="text" id="callsign-input" maxlength="16" value="TALON 01">
+    </div>
+    <div style="font-size:10px;color:var(--text-dim);line-height:1.7;padding:10px;background:var(--bg-1);border:1px dashed var(--line);margin-top:8px">
+      <div style="color:var(--cyan);margin-bottom:4px;letter-spacing:0.15em">NOTES</div>
+      <div>• Push time = max on-station so that transit + station + RTB + reserve ≤ FOB.</div>
+      <div>• Bingo = RTB fuel + reserve. Caution within 500 lb.</div>
+      <div>• GS = TAS − headwind. Negative headwind = tailwind.</div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<script>
+// ── SERVICE WORKER ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// ── PWA install banner (Safari hint) ──
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isStandalone = window.navigator.standalone;
+if (isIOS && !isStandalone) {
+  document.getElementById('install-banner').style.display = 'block';
+}
+
+// ── DATA ──
+const STORAGE_KEY = 'mq9_fuel_config_v1';
+
+const DEFAULT_BURN_TABLE = {
+  altitudes: [5000, 10000, 15000, 20000, 25000],
+  weights:   [8000, 9000, 10000, 10500],
+  burn: [
+    [520, 560, 600, 625],
+    [470, 505, 540, 560],
+    [425, 455, 485, 505],
+    [385, 410, 440, 460],
+    [350, 375, 400, 420],
+  ],
+  tas: [
+    [160, 158, 155, 153],
+    [170, 168, 165, 163],
+    [180, 178, 175, 173],
+    [190, 188, 185, 183],
+    [200, 198, 195, 193],
+  ],
+};
+
+const DEFAULT_CONFIG = {
+  callsign:    'TALON 01',
+  reserveFuel: 800,
+  stationAlt:  5000,
+  transitAlt:  25000,
+  grossWeight: 10000,
+  burnTable:   JSON.parse(JSON.stringify(DEFAULT_BURN_TABLE)),
+};
+
+let mission = {
+  fuelOnBoard:              3800,
+  distanceToStation:        180,
+  distanceHomeFromStation:  180,
+  transitHeadwind:          0,
+  stationHeadwind:          15,
+  rtbHeadwind:              0,
+  currentAlt:               5000,
+};
+
+let cfg;
+try {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  cfg = raw ? { ...DEFAULT_CONFIG, ...JSON.parse(raw) } : JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  if (!cfg.burnTable) cfg.burnTable = JSON.parse(JSON.stringify(DEFAULT_BURN_TABLE));
+} catch(e) {
+  cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+}
+
+function saveConfig() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch(e) {}
+}
+
+// ── MATH ──
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function bilinear(table, alt, wt) {
+  const { altitudes, weights, burn, tas } = table;
+  const a = clamp(alt, altitudes[0], altitudes[altitudes.length-1]);
+  const w = clamp(wt, weights[0], weights[weights.length-1]);
+  let i0 = 0;
+  for (let i = 0; i < altitudes.length-1; i++) {
+    if (a >= altitudes[i] && a <= altitudes[i+1]) { i0 = i; break; }
+  }
+  let j0 = 0;
+  for (let j = 0; j < weights.length-1; j++) {
+    if (w >= weights[j] && w <= weights[j+1]) { j0 = j; break; }
+  }
+  const i1 = Math.min(i0+1, altitudes.length-1);
+  const j1 = Math.min(j0+1, weights.length-1);
+  const aFrac = altitudes[i1]===altitudes[i0] ? 0 : (a-altitudes[i0])/(altitudes[i1]-altitudes[i0]);
+  const wFrac = weights[j1]===weights[j0] ? 0 : (w-weights[j0])/(weights[j1]-weights[j0]);
+  function interp(grid) {
+    const v00=grid[i0][j0], v01=grid[i0][j1];
+    const v10=grid[i1][j0], v11=grid[i1][j1];
+    return (v00+(v01-v00)*wFrac)+((v10+(v11-v10)*wFrac)-(v00+(v01-v00)*wFrac))*aFrac;
+  }
+  return { burn: interp(burn), tas: interp(tas) };
+}
+
+function compute() {
+  const t = cfg.burnTable, gw = cfg.grossWeight;
+  const cur     = bilinear(t, mission.currentAlt, gw);
+  const sta     = bilinear(t, cfg.stationAlt, gw);
+  const transit = bilinear(t, cfg.transitAlt, gw);
+  const rtb     = bilinear(t, cfg.transitAlt, gw);
+  const usableFuel    = Math.max(0, mission.fuelOnBoard - cfg.reserveFuel);
+  const rtbGS         = Math.max(1, rtb.tas - mission.rtbHeadwind);
+  const rtbTimeHr     = mission.distanceHomeFromStation / rtbGS;
+  const rtbFuel       = rtbTimeHr * rtb.burn;
+  const transitGS     = Math.max(1, transit.tas - mission.transitHeadwind);
+  const transitTimeHr = mission.distanceToStation / transitGS;
+  const transitFuel   = transitTimeHr * transit.burn;
+  const fuelAtStation   = mission.fuelOnBoard - transitFuel;
+  const usableAtStation = Math.max(0, fuelAtStation - cfg.reserveFuel - rtbFuel);
+  const plannedStation  = usableAtStation / sta.burn;
+  const endToReserve    = usableFuel / cur.burn;
+  const endDry          = mission.fuelOnBoard / cur.burn;
+  const gsNow           = Math.max(1, cur.tas - mission.stationHeadwind);
+  const rangeNow        = endToReserve * gsNow;
+  const bingoFuel       = rtbFuel + cfg.reserveFuel;
+  const overBingo       = mission.fuelOnBoard - bingoFuel;
+  return { cur, sta, transit, rtb,
+    burnNow:cur.burn, tasNow:cur.tas, gsNow,
+    usableFuel, rtbGS, rtbTimeHr, rtbFuel,
+    transitGS, transitTimeHr, transitFuel,
+    plannedStation, endToReserve, endDry, rangeNow,
+    bingoFuel, overBingo };
+}
+
+// ── FORMAT ──
+function fmt(n, d=0) {
+  return isFinite(n) ? n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}) : '---';
+}
+function fmtTime(hrs) {
+  if (!isFinite(hrs)||hrs<0) return '--:--';
+  const h=Math.floor(hrs), m=Math.floor((hrs-h)*60);
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+}
+function zuluNow() {
+  const d=new Date();
+  return String(d.getUTCHours()).padStart(2,'0')+String(d.getUTCMinutes()).padStart(2,'0')+String(d.getUTCSeconds()).padStart(2,'0')+'Z';
+}
+function el(id) { return document.getElementById(id); }
+function txt(id, v) { const e=el(id); if(e) e.textContent=v; }
+
+// ── RENDER ──
+function render() {
+  const c = compute();
+  const bingoStatus = c.overBingo>500 ? 'NOMINAL' : c.overBingo>0 ? 'CAUTION' : 'BINGO';
+  const bingoColor  = bingoStatus==='NOMINAL' ? 'var(--green)' : bingoStatus==='CAUTION' ? 'var(--amber)' : 'var(--red)';
+
+  const sb = el('status-badge');
+  sb.textContent = '● '+bingoStatus;
+  sb.style.color = bingoColor;
+
+  txt('push-time', fmtTime(c.plannedStation));
+  el('push-time').style.color = bingoColor;
+  txt('push-sub', 'AT '+fmt(cfg.stationAlt)+' FT · '+fmt(c.sta.burn)+' LB/HR');
+  const bf=el('m-bingo'); bf.textContent=fmt(c.bingoFuel)+' LB'; bf.style.color=bingoColor;
+  const ob=el('m-over-bingo'); ob.textContent=fmt(c.overBingo)+' LB';
+  ob.style.color=c.overBingo>=0?'var(--green)':'var(--red)';
+  txt('m-rtb-fuel', fmt(c.rtbFuel)+' LB');
+  txt('m-reserve',  fmt(cfg.reserveFuel)+' LB');
+
+  txt('cur-alt-hd', fmt(mission.currentAlt)+' FT');
+  txt('end-reserve', fmtTime(c.endToReserve));
+  txt('range-nm',    fmt(c.rangeNow));
+  txt('range-sub',   'NM · '+fmt(c.gsNow)+' KTS GS');
+  txt('m-burn-now',  fmt(c.burnNow)+' LB/HR');
+  txt('m-tas-now',   fmt(c.tasNow)+' KTAS');
+  txt('m-gs-now',    fmt(c.gsNow)+' KTS');
+  txt('m-fob',       fmt(mission.fuelOnBoard)+' LB');
+  txt('m-usable',    fmt(c.usableFuel)+' LB');
+
+  txt('tl-out-alt',  fmt(cfg.transitAlt)+' FT');
+  txt('tl-out-dist', fmt(mission.distanceToStation)+' NM');
+  txt('tl-out-gs',   fmt(c.transitGS)+' KTS');
+  txt('tl-out-burn', fmt(c.transit.burn)+' LB/HR');
+  txt('tl-out-time', fmtTime(c.transitTimeHr));
+  txt('tl-out-fuel', fmt(c.transitFuel)+' LB');
+  txt('tl-sta-alt',  fmt(cfg.stationAlt)+' FT');
+  txt('tl-sta-burn', fmt(c.sta.burn)+' LB/HR');
+  txt('tl-sta-time', fmtTime(c.plannedStation));
+  txt('tl-sta-fuel', fmt(c.plannedStation*c.sta.burn)+' LB');
+  txt('tl-rtb-alt',  fmt(cfg.transitAlt)+' FT');
+  txt('tl-rtb-dist', fmt(mission.distanceHomeFromStation)+' NM');
+  txt('tl-rtb-gs',   fmt(c.rtbGS)+' KTS');
+  txt('tl-rtb-burn', fmt(c.rtb.burn)+' LB/HR');
+  txt('tl-rtb-time', fmtTime(c.rtbTimeHr));
+  txt('tl-rtb-fuel', fmt(c.rtbFuel)+' LB');
+
+  const totalTime = c.transitTimeHr+c.plannedStation+c.rtbTimeHr;
+  const totalFuel = c.transitFuel+c.plannedStation*c.sta.burn+c.rtbFuel;
+  txt('total-time',    fmtTime(totalTime));
+  txt('total-fuel',    fmt(totalFuel)+' LB');
+  txt('total-reserve', fmt(cfg.reserveFuel)+' LB');
+
+  syncSliders();
+}
+
+// ── CLOCK ──
+setInterval(() => {
+  const c=el('clock');
+  if(c) c.innerHTML=zuluNow()+'<span class="blink">_</span>';
+}, 1000);
+
+// ── NAV ──
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    el('screen-'+btn.dataset.screen).classList.add('active');
+    el('content').scrollTop = 0;
+  });
+});
+
+// ── COLLAPSIBLE CARDS ──
+document.querySelectorAll('.card-hd').forEach(hd => {
+  hd.addEventListener('click', () => {
+    const body = el(hd.dataset.target);
+    if (!body) return;
+    const hidden = body.classList.toggle('hidden');
+    hd.classList.toggle('collapsed', hidden);
+  });
+});
+
+// ── CALLSIGN ──
+el('callsign-input').value = cfg.callsign;
+el('callsign-input').addEventListener('input', e => {
+  cfg.callsign = e.target.value.toUpperCase();
+  saveConfig();
+});
+
+// ── SLIDERS ──
+const SLIDERS = [
+  { key:'fuelOnBoard',             label:'FUEL ON BOARD',       unit:'LB',  min:500,  max:6000,  step:50,  src:'mission' },
+  { key:'currentAlt',              label:'CURRENT ALT',         unit:'FT',  min:5000, max:25000, step:500, src:'mission' },
+  { key:'stationHeadwind',         label:'STATION HEADWIND',    unit:'KTS', min:-60,  max:80,    step:1,   src:'mission' },
+  { key:'rtbHeadwind',             label:'RTB HEADWIND',        unit:'KTS', min:-60,  max:80,    step:1,   src:'mission' },
+  { key:'distanceToStation',       label:'DIST TO STATION',     unit:'NM',  min:0,    max:800,   step:5,   src:'mission' },
+  { key:'distanceHomeFromStation', label:'DIST STA → HOME',     unit:'NM',  min:50,   max:800,   step:5,   src:'mission' },
+];
+
+function buildSliders() {
+  const wrap = el('sliders'); wrap.innerHTML='';
+  SLIDERS.forEach(s => {
+    const obj = s.src==='mission' ? mission : cfg;
+    const div = document.createElement('div');
+    div.className = 'slider-row';
+    div.innerHTML = `
+      <div class="slider-hdr">
+        <span class="slider-lbl">${s.label}</span>
+        <span class="slider-val" id="sv-${s.key}">${fmt(obj[s.key])} ${s.unit}</span>
+      </div>
+      <input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${obj[s.key]}"
+             data-key="${s.key}" data-src="${s.src}" data-unit="${s.unit}">`;
+    wrap.appendChild(div);
+  });
+  wrap.querySelectorAll('input[type="range"]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const {key,src,unit} = e.target.dataset;
+      const val = Number(e.target.value);
+      if (src==='mission') mission[key]=val; else { cfg[key]=val; saveConfig(); }
+      txt('sv-'+key, fmt(val)+' '+unit);
+      syncMissionForm();
+      render();
+    });
+  });
+}
+
+function syncSliders() {
+  SLIDERS.forEach(s => {
+    const obj = s.src==='mission' ? mission : cfg;
+    const valEl = el('sv-'+s.key);
+    if (valEl) valEl.textContent = fmt(obj[s.key])+' '+s.unit;
+    const inp = document.querySelector(`input[type="range"][data-key="${s.key}"]`);
+    if (inp) inp.value = obj[s.key];
+  });
+}
+buildSliders();
+
+// ── MISSION FORM ──
+const MISSION_FIELDS = [
+  { key:'fuelOnBoard',             label:'Fuel on Board (lb)' },
+  { key:'currentAlt',              label:'Current Altitude (ft)' },
+  { key:'distanceToStation',       label:'Distance to Station (nm)' },
+  { key:'distanceHomeFromStation', label:'Distance Station → Home (nm)' },
+  { key:'transitHeadwind',         label:'Transit Headwind (kts, +head/−tail)' },
+  { key:'stationHeadwind',         label:'Station Headwind (kts)' },
+  { key:'rtbHeadwind',             label:'RTB Headwind (kts)' },
+];
+
+function buildMissionForm() {
+  const wrap = el('mission-form'); wrap.innerHTML='';
+  MISSION_FIELDS.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = `<label>${f.label}</label>
+      <input type="number" id="mf-${f.key}" value="${mission[f.key]}" inputmode="decimal">`;
+    wrap.appendChild(div);
+    div.querySelector('input').addEventListener('input', e => {
+      mission[f.key] = Number(e.target.value)||0;
+      syncSliders(); render();
+    });
+  });
+}
+buildMissionForm();
+
+function syncMissionForm() {
+  MISSION_FIELDS.forEach(f => {
+    const inp = el('mf-'+f.key);
+    if (inp) inp.value = mission[f.key];
+  });
+}
+
+// ── CONFIG FORM ──
+const CONFIG_FIELDS = [
+  { key:'grossWeight',  label:'Gross Weight (lb)' },
+  { key:'reserveFuel',  label:'Reserve / Min Landing Fuel (lb)' },
+  { key:'stationAlt',   label:'Default Station Altitude (ft)' },
+  { key:'transitAlt',   label:'Default Transit / RTB Altitude (ft)' },
+];
+
+function buildConfigForm() {
+  const wrap = el('config-form'); wrap.innerHTML='';
+  CONFIG_FIELDS.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = `<label>${f.label}</label>
+      <input type="number" id="cf-${f.key}" value="${cfg[f.key]}" inputmode="decimal">`;
+    wrap.appendChild(div);
+    div.querySelector('input').addEventListener('input', e => {
+      cfg[f.key] = Number(e.target.value)||0;
+      saveConfig(); render();
+    });
+  });
+}
+buildConfigForm();
+
+// ── PERF TABLES ──
+function buildTable(containerId, isBurn) {
+  const wrap = el(containerId);
+  const t = cfg.burnTable;
+  const data = isBurn ? t.burn : t.tas;
+  let html = '<table><thead><tr>';
+  html += '<th>ALT↓/GW→</th>';
+  t.weights.forEach((w,j) => {
+    html += `<th><input type="number" value="${w}" data-wt="${j}" class="wt-inp" inputmode="decimal"></th>`;
+  });
+  html += '</tr></thead><tbody>';
+  t.altitudes.forEach((a,i) => {
+    html += '<tr>';
+    html += `<td style="background:var(--bg-2)"><input type="number" value="${a}" data-alt="${i}" class="alt-inp" inputmode="decimal"></td>`;
+    t.weights.forEach((_,j) => {
+      html += `<td><input type="number" value="${data[i][j]}" data-i="${i}" data-j="${j}" class="${isBurn?'burn':'tas'}-cell" inputmode="decimal"></td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('.alt-inp').forEach(inp => {
+    inp.addEventListener('change', e => {
+      cfg.burnTable.altitudes[+e.target.dataset.alt]=Number(e.target.value)||0;
+      saveConfig(); render();
+    });
+  });
+  wrap.querySelectorAll('.wt-inp').forEach(inp => {
+    inp.addEventListener('change', e => {
+      cfg.burnTable.weights[+e.target.dataset.wt]=Number(e.target.value)||0;
+      saveConfig(); rebuildTables(); render();
+    });
+  });
+  const cls = isBurn?'.burn-cell':'.tas-cell';
+  const arr = isBurn?cfg.burnTable.burn:cfg.burnTable.tas;
+  wrap.querySelectorAll(cls).forEach(inp => {
+    inp.addEventListener('change', e => {
+      arr[+e.target.dataset.i][+e.target.dataset.j]=Number(e.target.value)||0;
+      saveConfig(); render();
+    });
+  });
+}
+
+function rebuildTables() {
+  buildTable('burn-table-wrap', true);
+  buildTable('tas-table-wrap',  false);
+}
+rebuildTables();
+
+el('reset-tables-btn').addEventListener('click', () => {
+  if (confirm('Reset performance tables to default placeholder values?')) {
+    cfg.burnTable = JSON.parse(JSON.stringify(DEFAULT_BURN_TABLE));
+    saveConfig(); rebuildTables(); render();
+  }
+});
+
+// ── EXPORT / IMPORT ──
+function showToast() {
+  const t = el('save-toast');
+  t.style.opacity = '1';
+  setTimeout(() => { t.style.opacity = '0'; }, 2000);
+}
+
+el('btn-export').addEventListener('click', () => {
+  const data = JSON.stringify(cfg, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'mq9_fuel_config.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast();
+});
+
+el('btn-import').addEventListener('click', () => {
+  el('file-import').click();
+});
+
+el('file-import').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      cfg = { ...DEFAULT_CONFIG, ...imported };
+      if (!cfg.burnTable) cfg.burnTable = JSON.parse(JSON.stringify(DEFAULT_BURN_TABLE));
+      saveConfig();
+      buildConfigForm();
+      rebuildTables();
+      el('callsign-input').value = cfg.callsign;
+      render();
+      showToast();
+    } catch(err) {
+      alert('Import failed — invalid config file.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// ── INIT ──
+render();
+</script>
+</body>
+</html>

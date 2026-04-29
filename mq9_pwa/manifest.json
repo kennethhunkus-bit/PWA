@@ -1,0 +1,18 @@
+{
+  "name": "MQ-9 Fuel Planner",
+  "short_name": "FuelPlan",
+  "description": "Maritime aerial surveillance fuel planning tool",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0d0e",
+  "theme_color": "#ffb000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
